@@ -1,20 +1,42 @@
 from django.http import HttpResponse, HttpResponseNotFound, Http404
 from django.shortcuts import render, redirect
 from .models import *
-menu = ['О сайте', 'Добавить статью', 'Обратная свяь', 'Войти']
+
+menu = [{'title': 'О сайте', 'url_name': 'about'},
+        {'title': 'Добавить статью', 'url_name': 'add_article'},
+        {'title': 'Обратная связь', 'url_name': 'feedback'},
+        {'title': 'Войти', 'url_name': 'login'}]
+
+def show_post(request, post_id):
+    return HttpResponse(f'Отображение статьи с id = {post_id}')
+def add_article(request):
+    return HttpResponse('Добавляем статью')
+
+
+def contact(request):
+    return HttpResponse('Обратная связь')
+
+
+def login(request):
+    return HttpResponse('Авторизация')
 
 
 def index(request):
     posts = Music.objects.all()
-    return render(request, 'general/index.html',
-                  {'title': 'Главная страница',
-                   'menu': menu,
-                   'posts': posts})
+    dir_context = {
+        'posts': posts,
+        'menu': menu,
+        'title': menu[0]['title'],
+    }
+    return render(request, 'general/index2.html', context=dir_context)
 
 
 def about(request):
-    return render(request, 'general/about.html',
-                  {'about': 'О сайте.', 'menu': menu})
+    dir_context = {
+        'menu': menu,
+        'title': 'О сайте'
+    }
+    return render(request, 'general/about.html', context=dir_context)
 
 
 def categories(request, categories_slug):
