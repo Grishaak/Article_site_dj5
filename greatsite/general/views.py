@@ -6,9 +6,34 @@ menu = [{'title': 'О сайте', 'url_name': 'about'},
         {'title': 'Добавить статью', 'url_name': 'add_article'},
         {'title': 'Обратная связь', 'url_name': 'feedback'},
         {'title': 'Войти', 'url_name': 'login'}]
+blender_posts = [Music.objects.all(),
+                 Movie.objects.all(),
+                 VideoGame.objects.all()]
+
 
 def show_post(request, post_id):
     return HttpResponse(f'Отображение статьи с id = {post_id}')
+
+
+def show_category(request, category_id):
+    flag = False
+    for i in blender_posts:
+        if i.filter(category_id=category_id):
+            posts = i
+            flag = True
+    cats = Category.objects.all()
+    if not flag:
+        raise Http404()
+    dir_context = {
+        'posts': posts,
+        'menu': menu,
+        'title': 'Cтатьи по рубрике.',
+        'cats': cats,
+        'cat_selected': category_id
+    }
+    return render(request, 'general/index.html', context=dir_context)
+
+
 def add_article(request):
     return HttpResponse('Добавляем статью')
 
@@ -22,13 +47,19 @@ def login(request):
 
 
 def index(request):
-    posts = Music.objects.all()
+    posts = []
+    for i in blender_posts:
+        for j in i[:3]:
+            posts.append(j)
+    cats = Category.objects.all()
     dir_context = {
         'posts': posts,
         'menu': menu,
         'title': menu[0]['title'],
+        'cats': cats,
+        'cat_selected': 0
     }
-    return render(request, 'general/index2.html', context=dir_context)
+    return render(request, 'general/index.html', context=dir_context)
 
 
 def about(request):
