@@ -1,41 +1,68 @@
-from django.http import HttpResponse, HttpResponseNotFound, Http404
-from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.paginator import Paginator
+from django.http import HttpResponse, HttpResponseNotFound, Http404, HttpResponseRedirect
+from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse_lazy
+from django.views.generic import ListView, DetailView, CreateView
+from .forms import *
 from .models import *
-
-menu = [{'title': 'О сайте', 'url_name': 'about'},
-        {'title': 'Добавить статью', 'url_name': 'add_article'},
-        {'title': 'Обратная связь', 'url_name': 'feedback'},
-        {'title': 'Войти', 'url_name': 'login'}]
-blender_posts = [Music.objects.all(),
-                 Movie.objects.all(),
-                 VideoGame.objects.all()]
+from .utils import *
 
 
-def show_post(request, post_id):
-    return HttpResponse(f'Отображение статьи с id = {post_id}')
+class ArticleIndex(DataMixin, ListView):
+    paginate_by = 3
+    model = Article
+    template_name = 'general/index.html'
+    context_object_name = 'posts'
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data(**kwargs)
+        c_def = self.get_user_context(title='Главная страница')
+        return dict(list(context.items()) + list(c_def.items()))
+
+    def get_queryset(self):
+        return Article.objects.filter(is_published=True)
 
 
-def show_category(request, category_id):
-    flag = False
-    for i in blender_posts:
-        if i.filter(category_id=category_id):
-            posts = i
-            flag = True
-    cats = Category.objects.all()
-    if not flag:
-        raise Http404()
-    dir_context = {
-        'posts': posts,
-        'menu': menu,
-        'title': 'Cтатьи по рубрике.',
-        'cats': cats,
-        'cat_selected': category_id
-    }
-    return render(request, 'general/index.html', context=dir_context)
+class ArticleCategory(DataMixin, ListView):
+    model = Article
+    template_name = 'general/index.html'
+    context_object_name = 'posts'
+    allow_empty = False
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data(**kwargs)
+        d_cef = self.get_user_context(title=context['posts'][0].category,
+                                      cat_selected=context['posts'][0].category_id)
+        return dict(list(context.items()) + list(d_cef.items()))
+
+    def get_queryset(self):
+        return Article.objects.filter(category__slug=self.kwargs['category_slug'], is_published=True)
 
 
-def add_article(request):
-    return HttpResponse('Добавляем статью')
+class ArticlePost(DataMixin, DetailView):
+    model = Article
+    template_name = 'general/post.html'
+    slug_url_kwarg = 'post_slug'
+    context_object_name = 'post'
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data(**kwargs)
+        c_def = self.get_user_context(title='Статья - ' + str(context['post']), cat_selected=None)
+        return dict(list(context.items()) + list(c_def.items()))
+
+
+class ArticleAddPage(LoginRequiredMixin, DataMixin, CreateView):
+    form_class = AddPostForm
+    template_name = 'general/addpage.html'
+    success_url = reverse_lazy('general')
+    login_url = reverse_lazy('general')
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data(**kwargs)
+        c_def = self.get_user_context(title='Добавление статьи')
+        return dict(list(context.items()) + list(c_def.items()))
 
 
 def contact(request):
@@ -46,23 +73,12 @@ def login(request):
     return HttpResponse('Авторизация')
 
 
-def index(request):
-    posts = []
-    for i in blender_posts:
-        for j in i[:3]:
-            posts.append(j)
-    cats = Category.objects.all()
-    dir_context = {
-        'posts': posts,
-        'menu': menu,
-        'title': menu[0]['title'],
-        'cats': cats,
-        'cat_selected': 0
-    }
-    return render(request, 'general/index.html', context=dir_context)
-
-
 def about(request):
+    contact_list = Article.objects.all()
+    paginator = Paginator(contact_list, 3)
+
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
     dir_context = {
         'menu': menu,
         'title': 'О сайте'
