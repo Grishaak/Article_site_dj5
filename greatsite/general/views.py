@@ -1,17 +1,17 @@
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth import logout, login
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import LoginView
 from django.core.paginator import Paginator
 from django.http import HttpResponse, HttpResponseNotFound, Http404, HttpResponseRedirect
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
-from django.views.generic import ListView, DetailView, CreateView
+from django.views.generic import ListView, DetailView, CreateView, FormView
 from .forms import *
 from .models import *
 from .utils import *
 
 
 class ArticleIndex(DataMixin, ListView):
-    paginate_by = 3
     model = Article
     template_name = 'general/index.html'
     context_object_name = 'posts'
@@ -22,10 +22,11 @@ class ArticleIndex(DataMixin, ListView):
         return dict(list(context.items()) + list(c_def.items()))
 
     def get_queryset(self):
-        return Article.objects.filter(is_published=True)
+        return Article.objects.filter(is_published=True).select_related('category')
 
 
 class ArticleCategory(DataMixin, ListView):
+    paginate_by = 3
     model = Article
     template_name = 'general/index.html'
     context_object_name = 'posts'
@@ -33,12 +34,14 @@ class ArticleCategory(DataMixin, ListView):
 
     def get_context_data(self, *, object_list=None, **kwargs):
         context = super().get_context_data(**kwargs)
-        d_cef = self.get_user_context(title=context['posts'][0].category,
-                                      cat_selected=context['posts'][0].category_id)
+        c = Category.objects.get(slug=self.kwargs['category_slug'])
+        d_cef = self.get_user_context(title=c.cat_name,
+                                      cat_selected=c.pk)
         return dict(list(context.items()) + list(d_cef.items()))
 
     def get_queryset(self):
-        return Article.objects.filter(category__slug=self.kwargs['category_slug'], is_published=True)
+        return Article.objects.filter(category__slug=self.kwargs['category_slug'], is_published=True).select_related(
+            'category')
 
 
 class ArticlePost(DataMixin, DetailView):
@@ -58,6 +61,7 @@ class ArticleAddPage(LoginRequiredMixin, DataMixin, CreateView):
     template_name = 'general/addpage.html'
     success_url = reverse_lazy('general')
     login_url = reverse_lazy('general')
+    raise_exception = True
 
     def get_context_data(self, *, object_list=None, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -65,39 +69,60 @@ class ArticleAddPage(LoginRequiredMixin, DataMixin, CreateView):
         return dict(list(context.items()) + list(c_def.items()))
 
 
-def contact(request):
-    return HttpResponse('Обратная связь')
+class ContactView(DataMixin, FormView):
+    form_class = ContactForm
+    template_name = 'general/contact.html'
+    success_url = reverse_lazy('general')
+    raise_exception = True
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data(**kwargs)
+        c_def = self.get_user_context(title="Обратная связь")
+        return dict(list(context.items()) + list(c_def.items()))
+
+    def form_valid(self, form):
+        print(form.cleaned_data)
+        return redirect('general')
+
+class RegisterUser(DataMixin, CreateView):
+    form_class = RegisterUserForm
+    template_name = 'general/register.html'
+    success_url = reverse_lazy('login')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        c_def = self.get_user_context(title='Регистрация')
+        return dict(list(context.items()) + list(c_def.items()))
+
+    def form_valid(self, form):
+        user = form.save()
+        login(self.request, user)
+        return redirect('general')
 
 
-def login(request):
-    return HttpResponse('Авторизация')
+class LoginUser(DataMixin, LoginView):
+    form_class = LoginUserForm
+    template_name = 'general/login.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        c_def = self.get_user_context(title='Регистрация')
+        return dict(list(context.items()) + list(c_def.items()))
 
 
-def about(request):
-    contact_list = Article.objects.all()
-    paginator = Paginator(contact_list, 3)
-
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    dir_context = {
-        'menu': menu,
-        'title': 'О сайте'
-    }
-    return render(request, 'general/about.html', context=dir_context)
+def logout_user(request):
+    logout(request)
+    return redirect('login')
 
 
-def categories(request, categories_slug):
-    if request.GET:
-        print(request.GET)
-    return HttpResponse('<h1>Страница категорий.</h1>'
-                        f'<p>{categories_slug}</p>')
+class AboutPage(DataMixin, ListView):
+    model = Article
+    template_name = 'general/about.html'
 
-
-def archive(request, year):
-    if int(year) > 2024:
-        return redirect("general", permanent=True)
-    return HttpResponse("<h1>Страница архива.</h1>"
-                        f"Год - {year}.")
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        c_def = self.get_user_context(title='О сайте')
+        return dict(list(context.items()) + list(c_def.items()))
 
 
 def pageNotFound(request, exception):
